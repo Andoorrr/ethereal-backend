@@ -4,7 +4,7 @@ import User    from '../models/User.js';
 import Negocio from '../models/Negocio.js';
 
 const generarToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN });
+  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
 // ─── RF01: Registro ──────────────────────────────────────────
 export const registrar = async (req, res, next) => {
@@ -40,12 +40,12 @@ export const login = async (req, res, next) => {
     // ── Usuario baneado ──────────────────────────────────────
     if (usuario.baneado) {
       return res.status(403).json({
-        ok:      false,
+        ok:        false,
         bloqueado: true,
-        tipo:    'baneado',
-        entidad: 'usuario',
-        motivo:  usuario.motivoBaneo || 'Violación de términos de servicio.',
-        mensaje: 'Tu cuenta ha sido baneada.',
+        tipo:      'baneado',
+        entidad:   'usuario',
+        motivo:    usuario.motivoBaneo || 'Violación de términos de servicio.',
+        mensaje:   'Tu cuenta ha sido baneada.',
       });
     }
 
@@ -54,13 +54,13 @@ export const login = async (req, res, next) => {
       const negocio = await Negocio.findOne({ propietario: usuario._id });
       if (negocio && negocio.estado !== 'activo') {
         return res.status(403).json({
-          ok:             false,
-          bloqueado:      true,
-          tipo:           negocio.estado,          // 'suspendido' | 'baneado'
-          entidad:        'negocio',
-          motivo:         negocio.motivoSuspension || '',
+          ok:              false,
+          bloqueado:       true,
+          tipo:            negocio.estado,
+          entidad:         'negocio',
+          motivo:          negocio.motivoSuspension || '',
           suspendidoHasta: negocio.suspendidoHasta || null,
-          mensaje:        `Tu negocio está ${negocio.estado}.`,
+          mensaje:         `Tu negocio está ${negocio.estado}.`,
         });
       }
     }
