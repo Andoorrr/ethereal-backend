@@ -31,7 +31,7 @@ app.use(cors({
     'http://localhost:5173',
     '*',
     'http://localhost:3000',
-    'https://poetic-taiyaki-c75cc3.netlify.app',
+    'https://graceful-travesseiro-ff631e.netlify.app/',
   ],
   credentials: false,
 }));
