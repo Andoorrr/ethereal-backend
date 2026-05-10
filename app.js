@@ -32,7 +32,7 @@ app.use(cors({
     'http://localhost:3000',
     'https://poetic-taiyaki-c75cc3.netlify.app',
   ],
-  credentials: true,
+  credentials: false,
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
