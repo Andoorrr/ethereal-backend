@@ -27,9 +27,11 @@ const app = express();
 
 // ─── Middlewares globales ────────────────────────────────────
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? ['https://poetic-taiyaki-c75cc3.netlify.app']
-    : ['http://localhost:3000', 'http://localhost:5173'],
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://poetic-taiyaki-c75cc3.netlify.app',
+  ],
   credentials: true,
 }));
 app.use(express.json());
