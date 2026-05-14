@@ -1,6 +1,8 @@
-// app.js — Plataforma de Reservas
+// app.js — Plataforma de Reservas con Socket.IO
 import 'dotenv/config';
 import express from 'express';
+import http from 'http';
+import { Server } from 'socket.io';
 import cors from 'cors';
 import passport from './config/passport.js';
 
@@ -19,39 +21,37 @@ import ticketRoutes  from './routes/ticketRoutes.js';
 
 import { iniciarRecordatorios } from './utils/recordatorios.js';
 import { iniciarCronJobs }      from './utils/cronJobs.js';
+import { configurarSocket }     from './utils/socket.js';
 
-// ─── Conexión a la base de datos ─────────────────────────────
 connectDB();
 
-const app = express();
+const app    = express();
+const server = http.createServer(app);
 
-// ─── Middlewares globales ────────────────────────────────────
-app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'https://poetic-taiyaki-c75cc3.netlify.app',
-    'https://graceful-travesseiro-ff631e.netlify.app',
-  ],
-  credentials: true,
-}));
+const ORIGENES_PERMITIDOS = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://poetic-taiyaki-c75cc3.netlify.app',
+  'https://graceful-travesseiro-ff631e.netlify.app',
+];
+
+// ─── Socket.IO ───────────────────────────────────────────────
+const io = new Server(server, {
+  cors: { origin: ORIGENES_PERMITIDOS, credentials: true },
+});
+configurarSocket(io);
+app.set('io', io); // disponible en controllers vía req.app.get('io')
+
+// ─── Middlewares ─────────────────────────────────────────────
+app.use(cors({ origin: ORIGENES_PERMITIDOS, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// ─── Passport (Google OAuth) ─────────────────────────────────
 app.use(passport.initialize());
 
-// ─── Health check ────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({
-    ok: true,
-    mensaje: 'Servidor de Reservas activo ✅',
-    version: '1.0.0',
-    timestamp: new Date().toISOString(),
-  });
+  res.json({ ok: true, mensaje: 'Servidor de Reservas activo ✅', version: '1.1.0', timestamp: new Date().toISOString() });
 });
 
-// ─── Rutas principales ───────────────────────────────────────
 app.use('/api/auth',           authRoutes);
 app.use('/api/usuarios',       usuarioRoutes);
 app.use('/api/negocios',       negocioRoutes);
@@ -62,19 +62,17 @@ app.use('/api/admin',          adminRoutes);
 app.use('/api/notificaciones', notifRoutes);
 app.use('/api/tickets',        ticketRoutes);
 
-// ─── Ruta no encontrada ──────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ ok: false, mensaje: `Ruta '${req.originalUrl}' no encontrada.` });
 });
 
-// ─── Manejador de errores ────────────────────────────────────
 app.use(errorHandler);
 
-// ─── Inicio del servidor ─────────────────────────────────────
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`\n🚀 Servidor corriendo en http://localhost:${PORT}`);
-  console.log(`📡 Entorno: ${process.env.NODE_ENV || 'development'}\n`);
+  console.log(`📡 Socket.IO activo`);
+  console.log(`🌐 Entorno: ${process.env.NODE_ENV || 'development'}\n`);
   iniciarRecordatorios();
   iniciarCronJobs();
 });

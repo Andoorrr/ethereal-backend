@@ -21,8 +21,6 @@ export const crearTicket = async (req, res, next) => {
       }],
     });
 
-    // Notificar admins (en producción buscarías admins reales)
-    // Por ahora solo confirmamos al usuario
     await crearNotificacion({
       usuarioId: req.usuario._id,
       tipo:    'sistema',
@@ -81,12 +79,10 @@ export const responderTicket = async (req, res, next) => {
 
     ticket.mensajes.push({ autor: req.usuario._id, rolAutor, contenido });
 
-    // Si admin responde por primera vez → en_proceso
     if (rolAutor === 'admin' && ticket.estado === 'abierto') ticket.estado = 'en_proceso';
 
     await ticket.save();
 
-    // Notificar al otro lado
     if (rolAutor === 'admin') {
       await crearNotificacion({
         usuarioId: ticket.usuario,
@@ -102,6 +98,18 @@ export const responderTicket = async (req, res, next) => {
       .populate('negocio', 'nombre')
       .populate('mensajes.autor', 'nombre foto rol');
 
+    // ── EMITIR EVENTO SOCKET.IO ──────────────────────────────
+    const io = req.app.get('io');
+    if (io) {
+      const nuevoMensaje = populated.mensajes[populated.mensajes.length - 1];
+      io.to(`ticket:${ticket._id}`).emit('ticket:mensaje', {
+        ticketId:    ticket._id.toString(),
+        mensaje:     nuevoMensaje,
+        estado:      populated.estado,
+        codigo:      populated.codigo,
+      });
+    }
+
     res.json({ ok: true, ticket: populated });
   } catch (error) { next(error); }
 };
@@ -115,6 +123,16 @@ export const cerrarTicket = async (req, res, next) => {
       { new: true }
     );
     if (!ticket) return res.status(404).json({ ok: false, mensaje: 'Ticket no encontrado.' });
+
+    // Emitir cambio de estado
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`ticket:${ticket._id}`).emit('ticket:estado', {
+        ticketId: ticket._id.toString(),
+        estado:   ticket.estado,
+      });
+    }
+
     res.json({ ok: true, mensaje: 'Ticket cerrado.', ticket });
   } catch (error) { next(error); }
 };
@@ -171,10 +189,8 @@ export const crearTicketDesdeReporte = async (req, res, next) => {
       }],
     });
 
-    // Marcar reporte como revisado
     await Reporte.findByIdAndUpdate(reporteId, { estado: 'revisado', accionAdmin: `Ticket creado: ${ticket.codigo}` });
 
-    // Notificar al reportador
     await crearNotificacion({
       usuarioId: reporte.reportador._id,
       tipo:    'sistema',
@@ -187,6 +203,8 @@ export const crearTicketDesdeReporte = async (req, res, next) => {
     res.status(201).json({ ok: true, ticket: populated });
   } catch (error) { next(error); }
 };
+
+// ── Admin: cambiar estado del ticket ─────────────────────────
 export const cambiarEstadoTicket = async (req, res, next) => {
   try {
     const { estado } = req.body;
@@ -210,6 +228,16 @@ export const cambiarEstadoTicket = async (req, res, next) => {
         });
       }
     }
+
+    // Emitir cambio de estado vía socket
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`ticket:${ticket._id}`).emit('ticket:estado', {
+        ticketId: ticket._id.toString(),
+        estado:   ticket.estado,
+      });
+    }
+
     res.json({ ok: true, ticket });
   } catch (error) { next(error); }
 };
