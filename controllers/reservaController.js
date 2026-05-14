@@ -333,27 +333,42 @@ export const finanzasNegocio = async (req, res, next) => {
 
     const reservas = await Reserva.find({ negocio: negocio._id })
       .populate('cliente', 'nombre correo')
+      .populate('local', 'nombre precio')
       .sort({ createdAt: -1 });
 
     const confirmadas = reservas.filter(r => r.estado === 'confirmada');
     const canceladas  = reservas.filter(r => r.estado === 'cancelada');
     const completadas = reservas.filter(r => r.estado === 'completada');
 
-    const PRECIO_SLOT   = negocio.precioPorSlot || 50;
-    const totalIngresos = (confirmadas.length + completadas.length) * PRECIO_SLOT;
+    // Calcular precio real por reserva (del local, o fallback 50)
+    const calcularPrecio = (r) => {
+      if (r.estado === 'cancelada') return 0;
+      const precioBase = r.local?.precio ?? 50;
+      // Si es hospedaje y tiene rango, calcular noches
+      if (r.fechaInicio && r.fechaFin && !r.horaInicio) {
+        const noches = Math.round((new Date(r.fechaFin) - new Date(r.fechaInicio)) / (1000 * 60 * 60 * 24));
+        return precioBase * Math.max(1, noches);
+      }
+      return precioBase;
+    };
+
+    const totalIngresos = reservas
+      .filter(r => r.estado === 'confirmada' || r.estado === 'completada')
+      .reduce((sum, r) => sum + calcularPrecio(r), 0);
 
     const transacciones = reservas.slice(0, 20).map(r => {
       const fechaBase = r.fechaInicio ?? r.fecha ?? new Date();
       const horaLabel = r.horaInicio
         ? `${r.horaInicio} a ${r.horaFin}`
         : new Date(fechaBase).toLocaleDateString('es-PE');
+      const monto = calcularPrecio(r);
       return {
         id:        r._id.toString(),
-        entity:    `Reserva — ${horaLabel}`,
+        entity:    `${r.local?.nombre || 'Reserva'} — ${horaLabel}`,
         subtext:   `Cliente: ${r.cliente?.nombre ?? 'Sin nombre'}`,
         date:      new Date(fechaBase).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }),
         type:      r.estado === 'cancelada' ? 'EXPENSE' : 'INCOME',
-        amount:    r.estado === 'cancelada' ? 0 : PRECIO_SLOT,
+        amount:    monto,
         estado:    r.estado,
         icon:      'hotel',
         iconBg:    r.estado === 'cancelada' ? 'bg-red-100' : 'bg-primary-container',
@@ -371,7 +386,7 @@ export const finanzasNegocio = async (req, res, next) => {
         confirmadas:   confirmadas.length,
         canceladas:    canceladas.length,
         completadas:   completadas.length,
-        precioPorSlot: PRECIO_SLOT,
+        precioPorSlot: 'Variable según local',
       },
       transacciones,
     });

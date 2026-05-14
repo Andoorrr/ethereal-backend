@@ -6,24 +6,27 @@ import Negocio from '../models/Negocio.js';
 const generarToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-// ─── RF01: Registro ──────────────────────────────────────────
+// ─── Registro ─────────────────────────────────────────────────
 export const registrar = async (req, res, next) => {
   try {
-    const { nombre, correo, password, telefono, rol } = req.body;
+    const { nombre, correo, password, telefono, dni, rol } = req.body;
     const existe = await User.findOne({ correo });
     if (existe) return res.status(400).json({ ok: false, mensaje: 'El correo ya está registrado.' });
 
-    const usuario = await User.create({ nombre, correo, password, telefono, rol });
+    const usuario = await User.create({ nombre, correo, password, telefono, dni, rol });
     res.status(201).json({
       ok: true,
       mensaje: 'Usuario registrado exitosamente.',
       token: generarToken(usuario._id),
-      usuario: { id: usuario._id, nombre: usuario.nombre, correo: usuario.correo, rol: usuario.rol, foto: usuario.foto },
+      usuario: {
+        id: usuario._id, nombre: usuario.nombre, correo: usuario.correo,
+        rol: usuario.rol, foto: usuario.foto, dni: usuario.dni, telefono: usuario.telefono
+      },
     });
   } catch (error) { next(error); }
 };
 
-// ─── RF02: Login ─────────────────────────────────────────────
+// ─── Login ────────────────────────────────────────────────────
 export const login = async (req, res, next) => {
   try {
     const { correo, password } = req.body;
@@ -37,30 +40,22 @@ export const login = async (req, res, next) => {
     if (!usuario.activo)
       return res.status(403).json({ ok: false, mensaje: 'Cuenta desactivada. Contacta soporte.' });
 
-    // ── Usuario baneado ──────────────────────────────────────
     if (usuario.baneado) {
       return res.status(403).json({
-        ok:        false,
-        bloqueado: true,
-        tipo:      'baneado',
-        entidad:   'usuario',
-        motivo:    usuario.motivoBaneo || 'Violación de términos de servicio.',
-        mensaje:   'Tu cuenta ha sido baneada.',
+        ok: false, bloqueado: true, tipo: 'baneado', entidad: 'usuario',
+        motivo: usuario.motivoBaneo || 'Violación de términos de servicio.',
+        mensaje: 'Tu cuenta ha sido baneada.',
       });
     }
 
-    // ── Negocio suspendido / baneado ─────────────────────────
     if (usuario.rol === 'negocio') {
       const negocio = await Negocio.findOne({ propietario: usuario._id });
       if (negocio && negocio.estado !== 'activo') {
         return res.status(403).json({
-          ok:              false,
-          bloqueado:       true,
-          tipo:            negocio.estado,
-          entidad:         'negocio',
-          motivo:          negocio.motivoSuspension || '',
+          ok: false, bloqueado: true, tipo: negocio.estado, entidad: 'negocio',
+          motivo: negocio.motivoSuspension || '',
           suspendidoHasta: negocio.suspendidoHasta || null,
-          mensaje:         `Tu negocio está ${negocio.estado}.`,
+          mensaje: `Tu negocio está ${negocio.estado}.`,
         });
       }
     }
@@ -68,12 +63,14 @@ export const login = async (req, res, next) => {
     res.json({
       ok: true,
       token: generarToken(usuario._id),
-      usuario: { id: usuario._id, nombre: usuario.nombre, correo: usuario.correo, rol: usuario.rol, foto: usuario.foto },
+      usuario: {
+        id: usuario._id, nombre: usuario.nombre, correo: usuario.correo,
+        rol: usuario.rol, foto: usuario.foto, dni: usuario.dni, telefono: usuario.telefono
+      },
     });
   } catch (error) { next(error); }
 };
 
-// ─── Obtener usuario autenticado ─────────────────────────────
 export const yo = async (req, res) => {
   res.json({ ok: true, usuario: req.usuario });
 };

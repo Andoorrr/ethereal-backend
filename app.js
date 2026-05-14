@@ -1,4 +1,4 @@
-// app.js — Plataforma de Reservas y Alquileres en Tiempo Real
+// app.js — Plataforma de Reservas
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';

@@ -34,7 +34,7 @@ passport.use(new GoogleStrategy({
         activo:    true,
       });
     } else {
-      // Vincular googleId si no lo tiene
+      // Vincular googleId
       if (!usuario.googleId) {
         usuario.googleId = profile.id;
         if (!usuario.foto && foto) usuario.foto = foto;

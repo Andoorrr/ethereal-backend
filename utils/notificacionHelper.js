@@ -1,4 +1,3 @@
-// backend/utils/notificacionHelper.js
 // Función standalone sin dependencias circulares
 import Notificacion from '../models/Notificacion.js';
 

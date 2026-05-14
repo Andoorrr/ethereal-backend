@@ -24,6 +24,12 @@ const userSchema = new mongoose.Schema(
       minlength: [6, 'Mínimo 6 caracteres'],
       select: false,
     },
+    dni: {
+      type: String,
+      trim: true,
+      match: [/^\d{8}$/, 'El DNI debe tener 8 dígitos'],
+      default: '',
+    },
     telefono: { type: String, trim: true, default: '' },
     bio:      { type: String, default: '', maxlength: [500, 'Bio máximo 500 caracteres'] },
     foto:     { type: String, default: '' },
