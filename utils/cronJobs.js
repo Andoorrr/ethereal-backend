@@ -1,56 +1,85 @@
 // backend/utils/cronJobs.js
-import cron from 'node-cron';
+import cron    from 'node-cron';
+import Reserva from '../models/Reserva.js';
 import Negocio from '../models/Negocio.js';
-import { crearNotificacion } from './notificacionHelper.js';
+import User    from '../models/User.js';
+import {
+  waMensajeRecordatorioCliente,
+  waMensajeRecordatorioNegocio,
+} from './whatsapp.js';
 
 /**
- * Cron que corre cada hora.
- * Reactiva negocios suspendidos cuya fecha de suspensión ya venció.
+ * Cron que corre todos los días a las 9:00 AM (hora Perú UTC-5).
+ * Busca reservas para el día siguiente y envía recordatorios
+ * por WhatsApp al cliente y al negocio.
  */
 export const iniciarCronJobs = () => {
+  // Corre a las 14:00 UTC = 9:00 AM Perú
+  cron.schedule('0 14 * * *', async () => {
+    console.log('⏰ [CronJob] Enviando recordatorios de reservas para mañana...');
 
-  // Cada hora en punto → '0 * * * *'
-  // Para pruebas cada minuto → '* * * * *'
-  cron.schedule('0 * * * *', async () => {
     try {
-      const ahora = new Date();
+      const manana     = new Date();
+      manana.setDate(manana.getDate() + 1);
+      manana.setUTCHours(0, 0, 0, 0);
 
-      // Buscar negocios suspendidos con fecha vencida
-      const vencidos = await Negocio.find({
-        estado:          'suspendido',
-        suspendidoHasta: { $lte: ahora },
-      }).populate('propietario', '_id nombre');
+      const pasadoManana = new Date(manana);
+      pasadoManana.setUTCHours(23, 59, 59, 999);
 
-      if (vencidos.length === 0) return;
+      const reservas = await Reserva.find({
+        fechaInicio: { $gte: manana, $lte: pasadoManana },
+        estado:      { $in: ['confirmada', 'pendiente'] },
+      })
+        .populate('cliente', 'nombre telefono')
+        .populate('negocio', 'nombre direccion propietario')
+        .populate('local',   'nombre');
 
-      console.log(`[CRON] Reactivando ${vencidos.length} negocio(s) con suspensión vencida...`);
+      console.log(`📋 [CronJob] ${reservas.length} reserva(s) para mañana.`);
 
-      for (const negocio of vencidos) {
-        // Reactivar
-        await Negocio.findByIdAndUpdate(negocio._id, {
-          estado:           'activo',
-          motivoSuspension: '',
-          suspendidoHasta:  null,
-        });
+      for (const reserva of reservas) {
+        const codigo     = reserva._id.toString().slice(-8).toUpperCase();
+        const localNombre = reserva.local?.nombre ?? '';
 
-        // Notificar al propietario
-        if (negocio.propietario?._id) {
-          await crearNotificacion({
-            usuarioId: negocio.propietario._id,
-            tipo:    'sistema',
-            titulo:  '¡Tu negocio ha sido reactivado!',
-            mensaje: `El período de suspensión de "${negocio.nombre}" ha finalizado. Ya puedes operar con normalidad.`,
-            link:    '/panel',
+        // ── WhatsApp al CLIENTE ───────────────────────────────
+        if (reserva.cliente?.telefono) {
+          await waMensajeRecordatorioCliente({
+            telefono:     reserva.cliente.telefono,
+            nombre:       reserva.cliente.nombre,
+            negocioNombre: reserva.negocio?.nombre ?? '',
+            localNombre,
+            direccion:    reserva.negocio?.direccion ?? '',
+            fechaInicio:  reserva.fechaInicio,
+            horaInicio:   reserva.horaInicio,
+            horaFin:      reserva.horaFin,
+            codigo,
           });
         }
 
-        console.log(`[CRON] Negocio reactivado: ${negocio.nombre}`);
+        // ── WhatsApp al NEGOCIO ───────────────────────────────
+        if (reserva.negocio?.propietario) {
+          const propietario = await User.findById(reserva.negocio.propietario).select('telefono');
+          if (propietario?.telefono) {
+            await waMensajeRecordatorioNegocio({
+              telefono:      propietario.telefono,
+              negocioNombre: reserva.negocio.nombre,
+              clienteNombre: reserva.cliente?.nombre ?? '',
+              localNombre,
+              fechaInicio:   reserva.fechaInicio,
+              horaInicio:    reserva.horaInicio,
+              horaFin:       reserva.horaFin,
+              codigo,
+            });
+          }
+        }
       }
 
-    } catch (err) {
-      console.error('[CRON] Error en reactivación automática:', err.message);
+      console.log('✅ [CronJob] Recordatorios enviados correctamente.');
+    } catch (error) {
+      console.error('❌ [CronJob] Error enviando recordatorios:', error.message);
     }
+  }, {
+    timezone: 'America/Lima',
   });
 
-  console.log('[CRON] Jobs iniciados — reactivación automática cada hora.');
+  console.log('⏰ CronJob de recordatorios iniciado (9:00 AM hora Lima)');
 };
